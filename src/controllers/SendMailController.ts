@@ -5,6 +5,7 @@ import { SurveysRespository } from '../repositories/SurveyRepository';
 import { SurveyUsersRepository } from '../repositories/SurveysUsersRepository';
 import { UsersRespository } from '../repositories/UsersRepository';
 import SendMailService from '../services/SendMailService';
+import { AppError } from '../__tests__/AppError';
 
 class SendMailController {
     async execute(request: Request, response: Response){
@@ -25,27 +26,28 @@ class SendMailController {
         const survey = await surveysRepository.findOne({id: survey_id});
 
         if(!survey){
-            return response.status(400).json({
-                error: "User does not exists!"
-            });
+            throw new AppError("User does not exists!");
         }
+
+        const surveyUserAlreadyExists = await surveysUsersRepository.findOne({
+            where: [{user_id: user.id, value: null}],
+            relations: ["user", "survey"]
+        });
 
         const variables = {
             name: user.name,
             title: survey.title,
             description: survey.description,
-            user_id: user.id,
+            id: "",
             link: process.env.URL_MAIL
         }
 
         const npsPath = resolve(__dirname, "..", "views", "emails", "npsmail.hbs");
 
-        const surveyUserAlreadyExists = await surveysUsersRepository.findOne({
-            where: [{user_id: user.id}, {value: null}],
-            relations: ["user", "survey"]
-        });
-
         if(surveyUserAlreadyExists){
+            console.log("Survey USer Existe")
+            variables.id = surveyUserAlreadyExists.id;
+            console.log(variables.id);
             await SendMailService.execute(email, survey.title, variables, npsPath);
             return response.json(surveyUserAlreadyExists);
         }
@@ -59,6 +61,7 @@ class SendMailController {
         await surveysUsersRepository.save(surveyUser);
         
         // Enviar email para o usuário
+        variables.id = surveyUser.id;
 
         await SendMailService.execute(email, survey.title, variables, npsPath);
         return response.json(surveyUser);
